@@ -1,7 +1,7 @@
 import streamlit as st
 import cv2
 import numpy as np
-from core.detector import HandGloveDetector
+from core.detector import SafetyDetector
 from core.alert import AlertManager
 from core.logger import EventLogger
 import time
@@ -12,19 +12,19 @@ from PIL import Image
 # ----------------- #
 st.set_page_config(
     page_title="AI Safety Monitoring",
-    page_icon="🧤",
+    page_icon="👷‍♂️",
     layout="wide"
 )
 
 st.title("🛡️ AI-Based Safety Monitoring System")
-st.markdown("**Objective:** Real-time detection of safety gloves using Computer Vision.")
+st.markdown("**Objective:** Real-time detection of safety gloves and head protection (helmets/caps) using Computer Vision.")
 
 # ----------------- #
 # Initialize Modules
 # ----------------- #
 @st.cache_resource
 def load_detector():
-    return HandGloveDetector()
+    return SafetyDetector()
 
 @st.cache_resource
 def load_alert_manager():
@@ -60,6 +60,16 @@ with col2:
     status_placeholder.success("System Ready")
     
     st.markdown("---")
+    st.subheader("Detection Metrics")
+    metric_cols = st.columns(3)
+    people_metric = metric_cols[0].empty()
+    people_metric.metric("People Count", "0")
+    unprotected_metric = metric_cols[1].empty()
+    unprotected_metric.metric("Unprotected", "0")
+    violations_metric = metric_cols[2].empty()
+    violations_metric.metric("Total Violations", "0")
+    
+    st.markdown("---")
     st.subheader("Recent Activity")
     log_placeholder = st.empty()
 
@@ -86,6 +96,7 @@ if run_camera:
         
         try:
             retry_count = 0
+            total_violations_count = 0
             while run_camera:
                 ret, frame = cap.read()
                 if not ret:
@@ -102,19 +113,31 @@ if run_camera:
                 frame = cv2.flip(frame, 1)
 
                 # Process Frame
-                processed_frame, is_violation = detector.detect(frame)
+                processed_frame, violations, people_count, unprotected_count = detector.detect(frame)
+                
+                # Update Metrics
+                people_metric.metric("People Count", str(people_count))
+                unprotected_metric.metric("Unprotected", str(unprotected_count))
+                violations_metric.metric("Total Violations", str(total_violations_count))
                 
                 # Handle Violations
-                if is_violation:
-                    alert_manager.trigger()
+                if len(violations) > 0:
+                    violation_text = " AND ".join(violations)
+                    # Red alert box for unsafe state
+                    status_placeholder.error(f"🚨 UNSAFE ALERT: {violation_text}!")
                     
                     current_time = time.time()
                     if current_time - last_log_time > log_cooldown:
+                        total_violations_count += len(violations)
                         last_log_time = current_time
-                        logger.log_violation(processed_frame)
-                        status_placeholder.error("🚨 ALERT: GLOVES NOT DETECTED!")
+                        logger.log_violation(processed_frame, event_msg=f"{violation_text}")
+                        alert_manager.trigger()
                 else:
-                    status_placeholder.success("✅ Safe: Gloves Detected or Hands Clear")
+                    if people_count > 0:
+                        # Green alert box for safe state
+                        status_placeholder.success("✅ SAFE: Fully Protected")
+                    else:
+                        status_placeholder.info("Monitoring... No people detected.")
                 
                 # Display frame
                 rgb_frame = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
@@ -128,3 +151,4 @@ if run_camera:
 else:
     status_placeholder.warning("Camera Offline")
     frame_placeholder.empty()
+
