@@ -41,37 +41,72 @@ logger = load_logger()
 # ----------------- #
 # Layout Setup
 # ----------------- #
-col1, col2 = st.columns([3, 1])
+tab1, tab2 = st.tabs(["Live Monitoring", "Violation Gallery"])
 
-with col1:
-    st.subheader("Live Camera Feed")
-    frame_placeholder = st.empty()
+with tab1:
+    col1, col2 = st.columns([3, 1])
 
-with col2:
-    st.subheader("Control Panel")
+    with col1:
+        st.subheader("Live Camera Feed")
+        frame_placeholder = st.empty()
+
+    with col2:
+        st.subheader("Control Panel")
+        
+        # Selecting the camera will auto-reset the run state if it was running
+        camera_index = st.selectbox("Select Camera Index", options=[0, 1], index=0, help="0 is usually your iPhone, 1 is your Mac Webcam")
+        run_camera = st.checkbox("Turn On Camera", value=False)
+        
+        st.markdown("---")
+        st.subheader("System Status")
+        status_placeholder = st.empty()
+        status_placeholder.success("System Ready")
+        
+        st.markdown("---")
+        st.subheader("Detection Metrics")
+        metric_cols = st.columns(3)
+        people_metric = metric_cols[0].empty()
+        people_metric.metric("People Count", "0")
+        unprotected_metric = metric_cols[1].empty()
+        unprotected_metric.metric("Unprotected", "0")
+        violations_metric = metric_cols[2].empty()
+        violations_metric.metric("Total Violations", "0")
+        
+        st.markdown("---")
+        st.subheader("Recent Activity")
+        log_placeholder = st.empty()
+
+with tab2:
+    st.subheader("Violation Gallery")
+    st.markdown("View snapshots of recent safety rules violations.")
     
-    # Selecting the camera will auto-reset the run state if it was running
-    camera_index = st.selectbox("Select Camera Index", options=[0, 1], index=0, help="0 is usually your iPhone, 1 is your Mac Webcam")
-    run_camera = st.checkbox("Turn On Camera", value=False)
+    st.button("Refresh Gallery")
     
-    st.markdown("---")
-    st.subheader("System Status")
-    status_placeholder = st.empty()
-    status_placeholder.success("System Ready")
-    
-    st.markdown("---")
-    st.subheader("Detection Metrics")
-    metric_cols = st.columns(3)
-    people_metric = metric_cols[0].empty()
-    people_metric.metric("People Count", "0")
-    unprotected_metric = metric_cols[1].empty()
-    unprotected_metric.metric("Unprotected", "0")
-    violations_metric = metric_cols[2].empty()
-    violations_metric.metric("Total Violations", "0")
-    
-    st.markdown("---")
-    st.subheader("Recent Activity")
-    log_placeholder = st.empty()
+    import os
+    image_dir = "captured_images"
+    if os.path.exists(image_dir):
+        image_files = sorted(
+            [f for f in os.listdir(image_dir) if f.endswith(('.jpg', '.png', '.jpeg'))],
+            reverse=True
+        )
+        if image_files:
+            # Display images in a grid
+            cols = st.columns(3)
+            # Show top 18 recent violations
+            for i, img_file in enumerate(image_files[:18]):
+                img_path = os.path.join(image_dir, img_file)
+                with cols[i % 3]:
+                    # Extract timestamp from filename violation_YYYY-MM-DD_HH-MM-SS-mmm.jpg
+                    caption = img_file.replace("violation_", "").replace(".jpg", "")
+                    try:
+                        st.image(img_path, caption=caption, use_column_width=True)
+                    except Exception as e:
+                        st.error("Error loading image")
+        else:
+            st.info("No violations recorded yet.")
+    else:
+        st.info("Captured images directory not found.")
+
 
 # ----------------- #
 # Main Processing Loop
